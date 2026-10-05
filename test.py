@@ -10,4 +10,6 @@ demo = gr.Interface(
     api_name="predict"
 )
 
+print ("Testing the Gradio interface...")
+
 demo.launch()
