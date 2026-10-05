@@ -9,7 +9,5 @@ demo = gr.Interface(
     outputs=["text"],
     api_name="predict"
 )
-
-print ("Testing the Gradio interface...")
-
+print("Hello, world!")
 demo.launch()
