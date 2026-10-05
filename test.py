@@ -9,5 +9,5 @@ demo = gr.Interface(
     outputs=["text"],
     api_name="predict"
 )
-
+print("Hello, world!")
 demo.launch()
