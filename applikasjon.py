@@ -23,3 +23,4 @@ df = df[df['vote_count'] > 100]
 
 print(f"Datasettet inneholder {len(df)} filmer med mer enn 100 stemmer og som har en beskrivelse!")
 
+print(df.head())
