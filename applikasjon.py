@@ -1,26 +1,114 @@
+import joblib
 import kagglehub
-from kagglehub import KaggleDatasetAdapter
 import pandas as pd
 
-file_path = "TMDB_movie_dataset_v11.csv"
-print("Laster ned datasettet fra Kaggle.")
+from pathlib import Path
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
 
-hf_dataset = kagglehub.dataset_load(
-  KaggleDatasetAdapter.HUGGING_FACE,
-  "asaniczka/tmdb-movies-dataset-2023-930k-movies",
-  file_path
+
+print("Laster ned datasettet...")
+
+path = Path(kagglehub.dataset_download(
+    "naserabdullahalam/phishing-email-dataset"
+))
+
+filer = [
+    "CEAS_08.csv",
+    "Enron.csv",
+    "Ling.csv",
+    "Nazario.csv",
+    "Nigerian_Fraud.csv",
+    "SpamAssasin.csv"
+]
+
+data = []
+
+for fil in filer:
+    df = pd.read_csv(path / fil, on_bad_lines="skip", low_memory=False)
+    df = df.reindex(columns=["sender", "subject", "body", "label"])
+
+    df[["sender", "subject", "body"]] = (
+        df[["sender", "subject", "body"]].fillna("").astype(str)
+    )
+
+    df["label"] = pd.to_numeric(df["label"], errors="coerce")
+    data.append(df[df["label"].isin([0, 1])])
+
+
+df = pd.concat(data, ignore_index=True)
+df = df.drop_duplicates(subset=["sender", "subject", "body"])
+
+df["text"] = df["subject"] + " " + df["body"]
+df = df[
+    (df["sender"].str.strip() != "") |
+    (df["text"].str.strip() != "")
+]
+
+X = df[["sender", "text"]]
+y = df["label"].astype(int)
+
+print(f"\nAntall e-poster: {len(df)}")
+print(f"Legitime: {(y == 0).sum()}")
+print(f"Spam/Phishing: {(y == 1).sum()}")
+
+
+features = ColumnTransformer([
+    (
+        "sender",
+        TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            min_df=2,
+            max_features=20000
+        ),
+        "sender"
+    ),
+    (
+        "text",
+        TfidfVectorizer(
+            ngram_range=(1, 2),
+            min_df=2,
+            max_features=60000
+        ),
+        "text"
+    )
+])
+
+
+modell = Pipeline([
+    ("features", features),
+    ("classifier", LogisticRegression(max_iter=2000))
+])
+
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-print("Hugging Face Dataset lastet inn vellykket!")
+print("\nTrener modellen...")
 
-df = hf_dataset.to_pandas()
+modell.fit(X_train, y_train)
 
-print(f"Datasettet inneholder {len(df)} filmer!")
+predictions = modell.predict(X_test)
 
-df = df.dropna(subset= ['title', 'overview'])
+print(f"\nAccuracy: {accuracy_score(y_test, predictions):.2%}")
+print(classification_report(
+    y_test,
+    predictions,
+    target_names=["Legitim", "Spam/Phishing"]
+))
 
-df = df[df['vote_count'] > 100]
 
-print(f"Datasettet inneholder {len(df)} filmer med mer enn 100 stemmer og som har en beskrivelse!")
+modell.fit(X, y)
 
-print(df.head())
+joblib.dump(
+    modell,
+    Path(__file__).resolve().parent / "phishing_modell.pkl"
+)
+
+print("\nModell lagret som phishing_modell.pkl")
